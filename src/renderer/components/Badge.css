@@ -18,6 +18,11 @@
   font-size: 10px;
 }
 
+.Badge--tiny {
+  padding: 1px;
+  font-size: 6px;
+}
+
 .Badge--blue {
   background: #8edce6;
 }
@@ -53,4 +58,25 @@
 .Badge .fa.fa-clipboard:before {
   display: inline-block;
   transform: translate(2%, -3%);
+}
+
+.Badge--hover:hover::after {
+  display: block;
+  position: absolute;
+  white-space: nowrap;
+  max-width: 204px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.25);
+  padding: 2px 4px;
+  background-color: white;
+  border-radius: 4px;
+  content: attr(data-hover);
+  top: calc(100% + 3px);
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--colorBlueBlack)
 }
