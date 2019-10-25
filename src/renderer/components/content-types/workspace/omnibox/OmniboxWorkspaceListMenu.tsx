@@ -23,6 +23,7 @@ import ListMenuSection from '../../../ListMenuSection'
 import ListMenuItem from '../../../ListMenuItem'
 import ListMenu from '../../../ListMenu'
 import OmniboxWorkspaceListMenuSection from './OmniboxWorkspaceListMenuSection'
+import { Doc as WorkspaceDoc } from '../Workspace'
 
 import './OmniboxWorkspaceListMenu.css'
 
@@ -33,14 +34,7 @@ export interface Props {
   search: string
   hypermergeUrl: DocUrl
   omniboxFinished: Function
-}
-
-interface WorkspaceDoc {
-  selfId: HypermergeUrl
-  contactIds: HypermergeUrl[]
-  currentDocUrl: PushpinUrl
-  viewedDocUrls: PushpinUrl[]
-  archivedDocUrls?: PushpinUrl[]
+  onContent: (url: PushpinUrl) => boolean
 }
 
 interface State {
@@ -155,9 +149,7 @@ export default class OmniboxWorkspaceListMenu extends React.PureComponent<Props,
             // into this.state.viewedDocs[url]
             const handle = window.repo.watch(hypermergeUrl, (doc) => {
               this.setState((state) => {
-                const { viewedDocs } = state
-                viewedDocs[url] = doc
-                return { viewedDocs }
+                return { viewedDocs: { ...state.viewedDocs, [url]: doc } }
               })
             })
             this.viewedDocHandles[url] = handle
@@ -174,9 +166,7 @@ export default class OmniboxWorkspaceListMenu extends React.PureComponent<Props,
               (contactId as unknown) as HypermergeUrl, // XXX: this is... wrong?
               (doc: ContactDoc) => {
                 this.setState((state) => {
-                  const { contacts } = state
-                  contacts[contactId] = doc
-                  return { contacts }
+                  return { contacts: { ...state.contacts, [contactId]: doc } }
                 })
               }
             )
@@ -326,44 +316,77 @@ export default class OmniboxWorkspaceListMenu extends React.PureComponent<Props,
   /* begin actions */
   view = {
     name: 'view',
-    callback: (url) => () => this.navigate(url),
     faIcon: 'fa-compass',
     label: 'View',
     shortcut: '⏎',
     keysForActionPressed: (e) => e.key === 'Enter',
+    callback: (url) => () => this.navigate(url),
   }
 
   invite = {
     name: 'invite',
-    callback: (url) => () => this.offerDocumentToIdentity(url),
     faIcon: 'fa-share-alt',
     label: 'Invite',
     shortcut: '⏎',
     keysForActionPressed: (e) => e.key === 'Enter',
+    callback: (url) => () => this.offerDocumentToIdentity(url),
   }
 
   archive = {
     name: 'archive',
     destructive: true,
-    callback: (url) => () => this.archiveDocument(url),
     faIcon: 'fa-trash',
     label: 'Archive',
     shortcut: '⌘+⌫',
     keysForActionPressed: (e) => (e.metaKey || e.ctrlKey) && e.key === 'Backspace',
+    callback: (url) => () => this.archiveDocument(url),
   }
 
   unarchive = {
     name: 'unarchive',
-    callback: (url) => () => this.unarchiveDocument(url),
     faIcon: 'fa-trash-restore',
     label: 'Unarchive',
     shortcut: '⌘+⌫',
     keysForActionPressed: (e) => (e.metaKey || e.ctrlKey) && e.key === 'Backspace',
+    callback: (url) => () => this.unarchiveDocument(url),
+  }
+
+  place = {
+    name: 'place',
+    faIcon: 'fa-download',
+    label: 'Place',
+    shortcut: '⏎',
+    keysForActionPressed: (e) => e.key === 'Enter',
+    callback: (url) => () => {
+      const landed = this.props.onContent(url)
+      if (landed) {
+        this.delistClip(url)
+      }
+    },
+  }
+
+  archiveClip = {
+    name: 'archive',
+    faIcon: 'fa-trash',
+    label: 'Archive',
+    shortcut: '⌘+⌫',
+    destructive: true,
+    keysForActionPressed: (e) => (e.metaKey || e.ctrlKey) && e.key === 'Backspace',
+    callback: (url) => () => this.delistClip(url),
   }
   /* end actions */
 
   /* sections begin */
   sectionDefinitions: Section[] = [
+    {
+      name: 'clips',
+      label: 'Clipped Items',
+      actions: [this.place, this.archiveClip],
+      items: (state, props) =>
+        !(!props.search && state.doc && state.doc.clips)
+          ? []
+          : state.doc.clips.map((url) => ({ url: url as PushpinUrl })),
+    },
     {
       name: 'viewedDocUrls',
       label: 'Boards',
@@ -388,10 +411,10 @@ export default class OmniboxWorkspaceListMenu extends React.PureComponent<Props,
         props.search === '' || !state.doc
           ? [] // don't show archived URLs unless there's a current search term
           : (state.doc.archivedDocUrls || [])
-              .map((url) => [url, this.state.viewedDocs[url]])
-              .filter(([url, doc]) => parseDocumentLink(url).type === 'board')
-              .filter(([url, doc]) => doc && doc.title.match(new RegExp(props.search, 'i')))
-              .map(([url, doc]) => ({ url })),
+            .map((url) => [url, this.state.viewedDocs[url]])
+            .filter(([url, doc]) => parseDocumentLink(url).type === 'board')
+            .filter(([url, doc]) => doc && doc.title.match(new RegExp(props.search, 'i')))
+            .map(([url, doc]) => ({ url })),
     },
     {
       name: 'docUrls',
@@ -480,6 +503,21 @@ export default class OmniboxWorkspaceListMenu extends React.PureComponent<Props,
           delete doc.archivedDocUrls[unarchiveIndex]
         }
       })
+  }
+
+  delistClip = (url) => {
+    if (!this.handle) {
+      return
+    }
+    this.handle.change((doc) => {
+      if (!doc.clips) {
+        return
+      }
+      const clipIndex = doc.clips.findIndex((i) => i === url)
+      if (clipIndex >= 0) {
+        delete doc.clips[clipIndex]
+      }
+    })
   }
 
   renderNothingFound = () => {
